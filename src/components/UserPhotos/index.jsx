@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Typography,
   Card,
@@ -11,15 +11,35 @@ import {
 } from "@mui/material";
 import { Link, useParams } from "react-router-dom";
 import "./styles.css";
-import models from "../../modelData/models";
+import fetchModel from "../../lib/fetchModelData";
 
 /**
  * Define UserPhotos, a React component of Project 4.
  */
 function UserPhotos() {
   const { userId } = useParams();
-  const user = models.userModel(userId);
-  const photos = models.photoOfUserModel(userId);
+  const [user, setUser] = useState(null);
+  const [photos, setPhotos] = useState(null);
+
+  useEffect(() => {
+    // Fetch user details
+    fetchModel(`/user/${userId}`)
+      .then((userData) => {
+        setUser(userData);
+      })
+      .catch((err) => {
+        console.error("Error fetching user details:", err);
+      });
+
+    // Fetch photos of user
+    fetchModel(`/photo/photosOfUser/${userId}`)
+      .then((photosData) => {
+        setPhotos(photosData);
+      })
+      .catch((err) => {
+        console.error("Error fetching user photos:", err);
+      });
+  }, [userId]);
 
   if (!user || !photos) {
     return <div>Loading...</div>;
