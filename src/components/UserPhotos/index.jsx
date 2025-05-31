@@ -8,6 +8,10 @@ import {
   List,
   ListItem,
   ListItemText,
+  TextField,
+  Button,
+  Box,
+  Alert,
 } from "@mui/material";
 import { Link, useParams } from "react-router-dom";
 import "./styles.css";
@@ -20,6 +24,21 @@ function UserPhotos() {
   const { userId } = useParams();
   const [user, setUser] = useState(null);
   const [photos, setPhotos] = useState(null);
+  const [commentTexts, setCommentTexts] = useState({}); // Store comment text for each photo
+  const [loading, setLoading] = useState({}); // Track loading state for each photo
+  const [errors, setErrors] = useState({}); // Track errors for each photo
+  const [isLoggedIn, setIsLoggedIn] = useState(true); // Assume user is logged in if they can access this page
+
+  const fetchPhotos = () => {
+    // Fetch photos of user
+    fetchModel(`/photo/photosOfUser/${userId}`)
+      .then((photosData) => {
+        setPhotos(photosData);
+      })
+      .catch((err) => {
+        console.error("Error fetching user photos:", err);
+      });
+  };
 
   useEffect(() => {
     // Fetch user details
@@ -31,15 +50,98 @@ function UserPhotos() {
         console.error("Error fetching user details:", err);
       });
 
-    // Fetch photos of user
-    fetchModel(`/photo/photosOfUser/${userId}`)
-      .then((photosData) => {
-        setPhotos(photosData);
-      })
-      .catch((err) => {
-        console.error("Error fetching user photos:", err);
-      });
+    fetchPhotos();
   }, [userId]);
+
+  // Handle comment text change
+  const handleCommentChange = (photoId, value) => {
+    setCommentTexts((prev) => ({
+      ...prev,
+      [photoId]: value,
+    }));
+
+    // Clear error when user starts typing
+    if (errors[photoId]) {
+      setErrors((prev) => ({
+        ...prev,
+        [photoId]: null,
+      }));
+    }
+  };
+
+  // Submit comment
+  const handleSubmitComment = async (photoId) => {
+    const commentText = commentTexts[photoId] || "";
+
+    // Validate comment
+    if (!commentText.trim()) {
+      setErrors((prev) => ({
+        ...prev,
+        [photoId]: "Comment cannot be empty",
+      }));
+      return;
+    }
+
+    setLoading((prev) => ({ ...prev, [photoId]: true }));
+    setErrors((prev) => ({ ...prev, [photoId]: null }));
+
+    try {
+      const response = await fetch(
+        `http://localhost:8081/api/photo/commentsOfPhoto/${photoId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            comment: commentText.trim(),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to add comment");
+      }
+
+      const result = await response.json();
+
+      // Update photos state to include new comment
+      setPhotos((prevPhotos) =>
+        prevPhotos.map((photo) =>
+          photo._id === photoId
+            ? {
+                ...photo,
+                comments: [...photo.comments, result.comment],
+              }
+            : photo
+        )
+      );
+
+      // Clear comment text
+      setCommentTexts((prev) => ({
+        ...prev,
+        [photoId]: "",
+      }));
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      setErrors((prev) => ({
+        ...prev,
+        [photoId]: error.message,
+      }));
+    } finally {
+      setLoading((prev) => ({ ...prev, [photoId]: false }));
+    }
+  };
+
+  // Handle Enter key press
+  const handleKeyPress = (event, photoId) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSubmitComment(photoId);
+    }
+  };
 
   if (!user || !photos) {
     return <div>Loading...</div>;
@@ -61,8 +163,8 @@ function UserPhotos() {
         <Card key={photo._id} className="photo-card">
           <CardMedia
             component="img"
-            image={`/images/${photo.file_name}`}
-            alt={`Photo by ${user.first_name}`}
+            image={`http://localhost:8081/images/${photo.file_name}`}
+            alt={`Photo by ${user.last_name}`}
             className="photo-image"
           />
 
@@ -109,6 +211,50 @@ function UserPhotos() {
                 </ListItem>
               )}
             </List>
+
+            {/* Add Comment Section - Only show if user is logged in */}
+            {isLoggedIn && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Add a comment:
+                </Typography>
+
+                {errors[photo._id] && (
+                  <Alert severity="error" sx={{ mb: 1 }}>
+                    {errors[photo._id]}
+                  </Alert>
+                )}
+
+                <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                  <TextField
+                    multiline
+                    minRows={2}
+                    maxRows={4}
+                    placeholder="Write your comment here..."
+                    value={commentTexts[photo._id] || ""}
+                    onChange={(e) =>
+                      handleCommentChange(photo._id, e.target.value)
+                    }
+                    onKeyPress={(e) => handleKeyPress(e, photo._id)}
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    disabled={loading[photo._id]}
+                  />
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={() => handleSubmitComment(photo._id)}
+                    disabled={
+                      loading[photo._id] || !commentTexts[photo._id]?.trim()
+                    }
+                    sx={{ minWidth: 80 }}
+                  >
+                    {loading[photo._id] ? "Adding..." : "Add"}
+                  </Button>
+                </Box>
+              </Box>
+            )}
           </CardContent>
         </Card>
       ))}
