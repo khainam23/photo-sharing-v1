@@ -5,7 +5,7 @@
  * @returns {Promise} A promise that resolves with the model data.
  */
 function fetchModel(url) {
-  const baseUrl = "http://localhost:8081/api";
+  const baseUrl = "https://photo-sharing-backend.vercel.app/api";
   const fullUrl = `${baseUrl}${url}`;
 
   return fetch(fullUrl, {
